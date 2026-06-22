@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Code Scanner</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
     <style>
         * {
             margin: 0;
@@ -40,6 +39,9 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            background: #000;
+            border-radius: 20px;
+            overflow: hidden;
         }
 
         video {
@@ -51,10 +53,6 @@
             object-fit: cover;
         }
 
-        canvas {
-            display: none;
-        }
-
         .scan-box {
             position: absolute;
             width: 250px;
@@ -62,91 +60,31 @@
             border: 3px solid #667eea;
             border-radius: 15px;
             background: transparent;
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
             z-index: 10;
             animation: pulse 2s infinite;
         }
 
         @keyframes pulse {
             0%, 100% {
-                box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3), inset 0 0 0 3px #667eea;
+                border-color: #667eea;
             }
             50% {
-                box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3), inset 0 0 0 3px #764ba2;
+                border-color: #764ba2;
             }
-        }
-
-        .corner {
-            position: absolute;
-            width: 30px;
-            height: 30px;
-            border: 3px solid #667eea;
-        }
-
-        .corner.top-left {
-            top: -3px;
-            left: -3px;
-            border-right: none;
-            border-bottom: none;
-        }
-
-        .corner.top-right {
-            top: -3px;
-            right: -3px;
-            border-left: none;
-            border-bottom: none;
-        }
-
-        .corner.bottom-left {
-            bottom: -3px;
-            left: -3px;
-            border-right: none;
-            border-top: none;
-        }
-
-        .corner.bottom-right {
-            bottom: -3px;
-            right: -3px;
-            border-left: none;
-            border-top: none;
         }
 
         .status {
             position: absolute;
             top: 20px;
-            right: 20px;
+            left: 20px;
             padding: 10px 15px;
             border-radius: 20px;
             font-size: 14px;
             font-weight: bold;
-            display: none;
-            z-index: 20;
-        }
-
-        .status.active {
-            display: block;
-        }
-
-        .status.scanning {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .status.detected {
-            background: #00b894;
+            background: rgba(102, 126, 234, 0.9);
             color: white;
-            animation: slideDown 0.5s ease;
-        }
-
-        @keyframes slideDown {
-            from {
-                transform: translateY(-20px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
+            z-index: 20;
         }
 
         .result-section {
@@ -232,17 +170,13 @@
             background: #e0e0e0;
         }
 
-        .zoom-indicator {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(102, 126, 234, 0.9);
-            color: white;
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: bold;
-            z-index: 20;
+        .error-message {
+            color: #d32f2f;
+            text-align: center;
+            padding: 20px;
+            background: #ffebee;
+            border-radius: 10px;
+            margin-top: 20px;
         }
     </style>
 </head>
@@ -250,18 +184,9 @@
     <div class="header">QR CODE SCANNER</div>
 
     <div class="scanner-container">
-        <video id="video" playsinline></video>
-        <canvas id="canvas"></canvas>
-        
-        <div class="scan-box">
-            <div class="corner top-left"></div>
-            <div class="corner top-right"></div>
-            <div class="corner bottom-left"></div>
-            <div class="corner bottom-right"></div>
-        </div>
-
-        <div class="status scanning active" id="status">Scanning...</div>
-        <div class="zoom-indicator" id="zoomIndicator">Zoom: 1x</div>
+        <video id="video" playsinline autoplay muted></video>
+        <div class="scan-box"></div>
+        <div class="status" id="status">Scanning...</div>
     </div>
 
     <div class="result-section" id="resultSection">
@@ -274,52 +199,67 @@
         </div>
     </div>
 
+    <div id="errorContainer"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
         const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const canvasContext = canvas.getContext('2d');
         const resultSection = document.getElementById('resultSection');
         const resultData = document.getElementById('resultData');
         const status = document.getElementById('status');
-        const zoomIndicator = document.getElementById('zoomIndicator');
+        const errorContainer = document.getElementById('errorContainer');
 
         let scanning = false;
         let currentZoom = 1;
         let stream = null;
-        let detectedBefore = false;
+        let canvas = null;
+        let canvasContext = null;
+        let qrDetectedLastFrame = false;
+        let zoomingIn = false;
+
+        function showError(message) {
+            errorContainer.innerHTML = `<div class="error-message">${message}</div>`;
+        }
 
         async function startScanning() {
             try {
                 const constraints = {
                     video: {
-                        facingMode: 'environment',
+                        facingMode: { ideal: 'environment' },
                         width: { ideal: 1920 },
                         height: { ideal: 1080 }
-                    }
+                    },
+                    audio: false
                 };
 
                 stream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = stream;
 
-                video.addEventListener('loadedmetadata', () => {
+                video.onloadedmetadata = () => {
                     video.play();
                     scanning = true;
                     scan();
-                });
+                };
+
             } catch (error) {
-                status.textContent = 'Camera access denied';
-                status.className = 'status active';
+                showError('Camera access denied. Please allow camera permissions and try again.');
+                status.textContent = 'Camera Error';
+                console.error('Camera error:', error);
             }
         }
 
         function scan() {
             if (!scanning) return;
 
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                canvasContext = canvas.getContext('2d', { willReadFrequently: true });
+            }
+
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
 
-                // Apply zoom
                 const zoomWidth = canvas.width / currentZoom;
                 const zoomHeight = canvas.height / currentZoom;
                 const zoomX = (canvas.width - zoomWidth) / 2;
@@ -331,31 +271,24 @@
                     0, 0, canvas.width, canvas.height
                 );
 
-                const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                try {
+                    const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
 
-                if (code) {
-                    if (!detectedBefore) {
-                        // First detection - auto zoom in
-                        autoZoomIn();
+                    if (code) {
+                        if (!qrDetectedLastFrame && !zoomingIn) {
+                            autoZoomIn();
+                        }
+                        displayResult(code.data);
+                        qrDetectedLastFrame = true;
+                    } else {
+                        if (qrDetectedLastFrame && currentZoom > 1) {
+                            zoomOut();
+                        }
+                        qrDetectedLastFrame = false;
                     }
-                    displayResult(code.data);
-                    status.textContent = '✓ QR Code Detected!';
-                    status.className = 'status active detected';
-                    detectedBefore = true;
-                } else {
-                    if (detectedBefore && currentZoom > 1) {
-                        // Gradually zoom out if no QR detected and we're zoomed
-                        setTimeout(() => {
-                            if (currentZoom > 1) {
-                                currentZoom = Math.max(1, currentZoom - 0.1);
-                                updateZoom();
-                            }
-                        }, 500);
-                    }
-                    if (detectedBefore) {
-                        detectedBefore = false;
-                    }
+                } catch (e) {
+                    console.log('QR decode error:', e);
                 }
             }
 
@@ -363,18 +296,25 @@
         }
 
         function autoZoomIn() {
+            zoomingIn = true;
+            let targetZoom = Math.min(currentZoom + 1.5, 5);
+            let steps = 10;
+            let currentStep = 0;
+
             const zoomInterval = setInterval(() => {
-                if (currentZoom < 5) {
-                    currentZoom = Math.min(currentZoom + 0.3, 5);
-                    updateZoom();
+                if (currentStep < steps) {
+                    currentZoom = 1 + (targetZoom - 1) * (currentStep / steps);
+                    currentStep++;
                 } else {
+                    currentZoom = targetZoom;
+                    zoomingIn = false;
                     clearInterval(zoomInterval);
                 }
-            }, 50);
+            }, 30);
         }
 
-        function updateZoom() {
-            zoomIndicator.textContent = `Zoom: ${currentZoom.toFixed(1)}x`;
+        function zoomOut() {
+            currentZoom = Math.max(currentZoom - 0.1, 1);
         }
 
         function displayResult(data) {
@@ -387,23 +327,26 @@
             } else {
                 openBtn.style.display = 'none';
             }
+
+            status.textContent = '✓ QR Code Found!';
         }
 
         function clearResult() {
             resultSection.classList.remove('active');
             resultData.textContent = '';
             currentZoom = 1;
-            detectedBefore = false;
-            updateZoom();
+            qrDetectedLastFrame = false;
+            status.textContent = 'Scanning...';
         }
 
         function copyResult() {
             const text = resultData.textContent;
             navigator.clipboard.writeText(text).then(() => {
                 const btn = event.target;
+                const originalText = btn.textContent;
                 btn.textContent = 'Copied!';
                 setTimeout(() => {
-                    btn.textContent = 'Copy';
+                    btn.textContent = originalText;
                 }, 2000);
             });
         }
@@ -413,10 +356,10 @@
             window.open(url, '_blank');
         }
 
-        // Start scanning when page loads
-        window.addEventListener('load', startScanning);
+        window.addEventListener('load', () => {
+            setTimeout(startScanning, 500);
+        });
 
-        // Stop scanning when page unloads
         window.addEventListener('beforeunload', () => {
             scanning = false;
             if (stream) {
