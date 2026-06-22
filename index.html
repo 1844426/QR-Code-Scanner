@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Scanner - Long Range</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 0.95em;
+        }
+
+        .content {
+            padding: 25px;
+        }
+
+        .camera-section {
+            position: relative;
+            background: #000;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        canvas {
+            display: none;
+        }
+
+        .zoom-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            flex: 1;
+            min-width: 100px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+            border: 2px solid #ddd;
+        }
+
+        .btn-secondary:hover {
+            background: #e8e8e8;
+        }
+
+        .zoom-display {
+            text-align: center;
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .result-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .result-section.active {
+            display: block;
+        }
+
+        .result-title {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .result-data {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            word-break: break-all;
+            font-family: 'Courier New', monospace;
+            font-size: 1em;
+            border-left: 4px solid #667eea;
+            margin-bottom: 15px;
+        }
+
+        .result-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .status {
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            display: none;
+        }
+
+        .status.active {
+            display: block;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .feature-item {
+            text-align: center;
+            padding: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .feature-icon {
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 1.5em;
+            }
+
+            button {
+                min-width: 80px;
+                padding: 10px 15px;
+                font-size: 0.9em;
+            }
+
+            .zoom-controls {
+                gap: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 QR Code Scanner</h1>
+            <p>Scan QR codes from far away with zoom and continuous detection</p>
+        </div>
+
+        <div class="content">
+            <div class="status" id="status"></div>
+
+            <div class="camera-section">
+                <video id="video" playsinline></video>
+                <canvas id="canvas"></canvas>
+            </div>
+
+            <div class="zoom-controls">
+                <button class="btn-secondary" onclick="zoomOut()">🔍− Zoom Out</button>
+                <button class="btn-secondary" onclick="resetZoom()">Reset</button>
+                <button class="btn-secondary" onclick="zoomIn()">🔍+ Zoom In</button>
+            </div>
+            <div class="zoom-display">
+                <span id="zoomLevel">Zoom: 1x</span>
+            </div>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn-primary" onclick="startScanning()" style="flex: 1; min-width: 150px;">▶ Start Scanner</button>
+                <button class="btn-secondary" onclick="stopScanning()" style="flex: 1; min-width: 150px;">⏹ Stop Scanner</button>
+            </div>
+
+            <div class="result-section" id="resultSection">
+                <div class="result-title">📊 Scan Result</div>
+                <div class="result-data" id="resultData"></div>
+                <div class="result-actions">
+                    <button class="btn-primary" onclick="copyResult()" style="flex: 1;">📋 Copy</button>
+                    <button class="btn-primary" onclick="openLink()" id="openBtn" style="flex: 1; display: none;">🔗 Open Link</button>
+                    <button class="btn-secondary" onclick="clearResult()" style="flex: 1;">🗑 Clear</button>
+                </div>
+            </div>
+
+            <div class="features">
+                <div class="feature-item">
+                    <div class="feature-icon">📸</div>
+                    <div>High Quality</div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🔍</div>
+                    <div>Zoom Support</div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">⚡</div>
+                    <div>Real-time Scan</div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🎯</div>
+                    <div>Continuous Mode</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const canvasContext = canvas.getContext('2d');
+        const resultSection = document.getElementById('resultSection');
+        const resultData = document.getElementById('resultData');
+        const status = document.getElementById('status');
+        const zoomLevelDisplay = document.getElementById('zoomLevel');
+
+        let scanning = false;
+        let currentZoom = 1;
+        let stream = null;
+        const maxZoom = 5;
+        const minZoom = 1;
+        const zoomStep = 0.5;
+
+        function showStatus(message, type) {
+            status.textContent = message;
+            status.className = `status active ${type}`;
+            setTimeout(() => {
+                status.classList.remove('active');
+            }, 3000);
+        }
+
+        async function startScanning() {
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
+
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                video.play();
+
+                scanning = true;
+                showStatus('Camera started - ready to scan', 'info');
+                scan();
+            } catch (error) {
+                showStatus('Camera access denied. Please allow camera permissions.', 'error');
+                console.error('Error accessing camera:', error);
+            }
+        }
+
+        function stopScanning() {
+            scanning = false;
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            showStatus('Scanner stopped', 'info');
+        }
+
+        function scan() {
+            if (!scanning) return;
+
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                // Apply zoom by drawing a zoomed portion
+                const zoomWidth = canvas.width / currentZoom;
+                const zoomHeight = canvas.height / currentZoom;
+                const zoomX = (canvas.width - zoomWidth) / 2;
+                const zoomY = (canvas.height - zoomHeight) / 2;
+
+                canvasContext.drawImage(
+                    video,
+                    zoomX, zoomY, zoomWidth, zoomHeight,
+                    0, 0, canvas.width, canvas.height
+                );
+
+                const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: 'dontInvert',
+                });
+
+                if (code) {
+                    displayResult(code.data);
+                    showStatus('QR Code detected!', 'success');
+                }
+            }
+
+            requestAnimationFrame(scan);
+        }
+
+        function displayResult(data) {
+            resultData.textContent = data;
+            resultSection.classList.add('active');
+
+            const openBtn = document.getElementById('openBtn');
+            if (data.startsWith('http://') || data.startsWith('https://')) {
+                openBtn.style.display = 'block';
+            } else {
+                openBtn.style.display = 'none';
+            }
+        }
+
+        function clearResult() {
+            resultSection.classList.remove('active');
+            resultData.textContent = '';
+        }
+
+        function copyResult() {
+            const text = resultData.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                showStatus('Copied to clipboard!', 'success');
+            });
+        }
+
+        function openLink() {
+            const url = resultData.textContent;
+            window.open(url, '_blank');
+        }
+
+        function zoomIn() {
+            if (currentZoom < maxZoom) {
+                currentZoom = Math.min(currentZoom + zoomStep, maxZoom);
+                updateZoomDisplay();
+            }
+        }
+
+        function zoomOut() {
+            if (currentZoom > minZoom) {
+                currentZoom = Math.max(currentZoom - zoomStep, minZoom);
+                updateZoomDisplay();
+            }
+        }
+
+        function resetZoom() {
+            currentZoom = 1;
+            updateZoomDisplay();
+        }
+
+        function updateZoomDisplay() {
+            zoomLevelDisplay.textContent = `Zoom: ${currentZoom.toFixed(1)}x`;
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '+' || e.key === '=') zoomIn();
+            if (e.key === '-') zoomOut();
+            if (e.key === '0') resetZoom();
+            if (e.key === ' ') {
+                e.preventDefault();
+                scanning ? stopScanning() : startScanning();
+            }
+        });
+    </script>
+</body>
+</html>
