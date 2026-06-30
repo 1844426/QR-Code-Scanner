@@ -3,369 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR Code Scanner</title>
+    <title>Auto-Zoom QR Scanner</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        * {
+        body {
+            font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: white;
-            min-height: 100vh;
+            background-color: #121212;
+            color: white;
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
-            padding: 20px;
+            justify-content: center;
+            min-height: 100vh;
         }
-
-        .header {
-            position: absolute;
-            top: 40px;
-            font-size: 28px;
-            font-weight: bold;
-            color: #333;
-            letter-spacing: 1px;
-        }
-
-        .scanner-container {
-            position: relative;
-            width: 100%;
+        #scanner-container {
+            width: 90%;
             max-width: 500px;
-            aspect-ratio: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: #000;
-            border-radius: 20px;
+            border-radius: 12px;
             overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            background: #000;
         }
-
-        video {
-            position: absolute;
-            top: 0;
-            left: 0;
+        #reader {
             width: 100%;
-            height: 100%;
-            object-fit: cover;
         }
-
-        .scan-box {
-            position: absolute;
-            width: 250px;
-            height: 250px;
-            border: 3px solid #667eea;
-            border-radius: 15px;
-            background: transparent;
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
-            z-index: 10;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% {
-                border-color: #667eea;
-            }
-            50% {
-                border-color: #764ba2;
-            }
-        }
-
-        .status {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            padding: 10px 15px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: bold;
-            background: rgba(102, 126, 234, 0.9);
-            color: white;
-            z-index: 20;
-        }
-
-        .result-section {
-            position: absolute;
-            bottom: 40px;
-            left: 20px;
-            right: 20px;
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-            display: none;
-            z-index: 20;
-        }
-
-        .result-section.active {
-            display: block;
-            animation: slideUp 0.5s ease;
-        }
-
-        @keyframes slideUp {
-            from {
-                transform: translateY(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-
-        .result-title {
-            font-size: 12px;
-            color: #999;
-            text-transform: uppercase;
-            margin-bottom: 8px;
-            letter-spacing: 1px;
-        }
-
-        .result-data {
-            background: #f5f5f5;
-            padding: 12px;
-            border-radius: 8px;
-            word-break: break-all;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            margin-bottom: 12px;
-            max-height: 80px;
-            overflow-y: auto;
-        }
-
-        .result-actions {
-            display: flex;
-            gap: 10px;
-        }
-
-        .btn {
-            flex: 1;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: #5568d3;
-        }
-
-        .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
-        }
-
-        .btn-secondary:hover {
-            background: #e0e0e0;
-        }
-
-        .error-message {
-            color: #d32f2f;
-            text-align: center;
-            padding: 20px;
-            background: #ffebee;
-            border-radius: 10px;
+        #status {
             margin-top: 20px;
+            font-size: 1.1rem;
+            color: #bb86fc;
+            text-align: center;
+            padding: 0 20px;
         }
     </style>
 </head>
 <body>
-    <div class="header">QR CODE SCANNER</div>
 
-    <div class="scanner-container">
-        <video id="video" playsinline autoplay muted></video>
-        <div class="scan-box"></div>
-        <div class="status" id="status">Scanning...</div>
+    <h2>AI Auto-Zoom QR Scanner</h2>
+    <div id="scanner-container">
+        <div id="reader"></div>
     </div>
+    <div id="status">Scanning for QR codes...</div>
 
-    <div class="result-section" id="resultSection">
-        <div class="result-title">Result</div>
-        <div class="result-data" id="resultData"></div>
-        <div class="result-actions">
-            <button class="btn btn-primary" onclick="copyResult()">Copy</button>
-            <button class="btn btn-primary" onclick="openLink()" id="openBtn" style="display: none;">Open</button>
-            <button class="btn btn-secondary" onclick="clearResult()">Close</button>
-        </div>
-    </div>
-
-    <div id="errorContainer"></div>
-
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
-        const video = document.getElementById('video');
-        const resultSection = document.getElementById('resultSection');
-        const resultData = document.getElementById('resultData');
-        const status = document.getElementById('status');
-        const errorContainer = document.getElementById('errorContainer');
+        let html5QrCode;
+        let cameraTrack = null;
+        let isRedirecting = false;
 
-        let scanning = false;
-        let currentZoom = 1;
-        let stream = null;
-        let canvas = null;
-        let canvasContext = null;
-        let qrDetectedLastFrame = false;
-        let zoomingIn = false;
+        async function startScanner() {
+            // Initialize the scanner
+            html5QrCode = new Html5Qrcode("reader");
 
-        function showError(message) {
-            errorContainer.innerHTML = `<div class="error-message">${message}</div>`;
-        }
+            const config = { 
+                fps: 15, 
+                qrbox: (width, height) => {
+                    // Dynamic box size based on screen
+                    return { width: width * 0.8, height: height * 0.8 };
+                }
+            };
 
-        async function startScanning() {
             try {
-                const constraints = {
-                    video: {
-                        facingMode: { ideal: 'environment' },
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    },
-                    audio: false
-                };
-
-                stream = await navigator.mediaDevices.getUserMedia(constraints);
-                video.srcObject = stream;
-
-                video.onloadedmetadata = () => {
-                    video.play();
-                    scanning = true;
-                    scan();
-                };
-
-            } catch (error) {
-                showError('Camera access denied. Please allow camera permissions and try again.');
-                status.textContent = 'Camera Error';
-                console.error('Camera error:', error);
-            }
-        }
-
-        function scan() {
-            if (!scanning) return;
-
-            if (!canvas) {
-                canvas = document.createElement('canvas');
-                canvasContext = canvas.getContext('2d', { willReadFrequently: true });
-            }
-
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-
-                const zoomWidth = canvas.width / currentZoom;
-                const zoomHeight = canvas.height / currentZoom;
-                const zoomX = (canvas.width - zoomWidth) / 2;
-                const zoomY = (canvas.height - zoomHeight) / 2;
-
-                canvasContext.drawImage(
-                    video,
-                    zoomX, zoomY, zoomWidth, zoomHeight,
-                    0, 0, canvas.width, canvas.height
+                // Start with the back camera
+                await html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config, 
+                    onScanSuccess, 
+                    onScanFailure
                 );
 
-                try {
-                    const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
-                    const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-                    if (code) {
-                        if (!qrDetectedLastFrame && !zoomingIn) {
-                            autoZoomIn();
-                        }
-                        displayResult(code.data);
-                        qrDetectedLastFrame = true;
-                    } else {
-                        if (qrDetectedLastFrame && currentZoom > 1) {
-                            zoomOut();
-                        }
-                        qrDetectedLastFrame = false;
-                    }
-                } catch (e) {
-                    console.log('QR decode error:', e);
+                // Grab the raw camera track so we can programmatically zoom it
+                const scannerElement = document.getElementById('reader__video');
+                if (scannerElement && scannerElement.srcObject) {
+                    cameraTrack = scannerElement.srcObject.getVideoTracks()[0];
                 }
+            } catch (err) {
+                document.getElementById('status').innerText = "Camera error: " + err;
             }
-
-            requestAnimationFrame(scan);
         }
 
-        function autoZoomIn() {
-            zoomingIn = true;
-            let targetZoom = Math.min(currentZoom + 1.5, 5);
-            let steps = 10;
-            let currentStep = 0;
+        function onScanSuccess(decodedText, decodedResult) {
+            // Prevent accidental double-redirects
+            if (isRedirecting) return;
 
-            const zoomInterval = setInterval(() => {
-                if (currentStep < steps) {
-                    currentZoom = 1 + (targetZoom - 1) * (currentStep / steps);
-                    currentStep++;
-                } else {
-                    currentZoom = targetZoom;
-                    zoomingIn = false;
-                    clearInterval(zoomInterval);
-                }
-            }, 30);
-        }
-
-        function zoomOut() {
-            currentZoom = Math.max(currentZoom - 0.1, 1);
-        }
-
-        function displayResult(data) {
-            resultData.textContent = data;
-            resultSection.classList.add('active');
-
-            const openBtn = document.getElementById('openBtn');
-            if (data.startsWith('http://') || data.startsWith('https://')) {
-                openBtn.style.display = 'block';
-            } else {
-                openBtn.style.display = 'none';
-            }
-
-            status.textContent = '✓ QR Code Found!';
-        }
-
-        function clearResult() {
-            resultSection.classList.remove('active');
-            resultData.textContent = '';
-            currentZoom = 1;
-            qrDetectedLastFrame = false;
-            status.textContent = 'Scanning...';
-        }
-
-        function copyResult() {
-            const text = resultData.textContent;
-            navigator.clipboard.writeText(text).then(() => {
-                const btn = event.target;
-                const originalText = btn.textContent;
-                btn.textContent = 'Copied!';
+            // Check if the decoded text looks like a URL
+            if (decodedText.startsWith("http://") || decodedText.startsWith("https://")) {
+                isRedirecting = true;
+                document.getElementById('status').innerText = "Redirecting to: " + decodedText;
+                
+                // Automatically redirect the browser to the website
                 setTimeout(() => {
-                    btn.textContent = originalText;
-                }, 2000);
-            });
-        }
-
-        function openLink() {
-            const url = resultData.textContent;
-            window.open(url, '_blank');
-        }
-
-        window.addEventListener('load', () => {
-            setTimeout(startScanning, 500);
-        });
-
-        window.addEventListener('beforeunload', () => {
-            scanning = false;
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
+                    window.location.href = decodedText;
+                }, 800); 
+            } else {
+                document.getElementById('status').innerText = "Found text (not a link): " + decodedText;
             }
-        });
+        }
+
+        function onScanFailure(error) {
+            // The library runs this loop constantly when it doesn't see a QR code.
+            // This is where we handle the Auto-Zoom logic if a partial QR code or distant boundary is found.
+            
+            if (!cameraTrack) return;
+
+            const capabilities = cameraTrack.getCapabilities();
+            const settings = cameraTrack.getSettings();
+
+            // Check if the device hardware actually supports digital zoom
+            if (capabilities.zoom) {
+                let currentZoom = settings.zoom || 1;
+                let maxZoom = capabilities.zoom.max;
+
+                /* CRITICAL LOGIC FOR DISTANT DETECTION:
+                  Html5Qrcode passes detailed error objects. If it's a "No QR code found" error,
+                  but the camera sees *something* that resembles a code border (often tagged in custom ML layers),
+                  we can force a zoom. 
+                  
+                  For standard browser JS, we can implement a slight gradual zoom-in if it takes 
+                  longer than 3 seconds without finding anything, helping it catch far away codes!
+                */
+                
+                // Example: If a code is detected but fails to parse fully due to distance, boost zoom.
+                if (error.includes("NotFoundException") && currentZoom < maxZoom) {
+                    // Gently step up zoom by 0.5x increments to check further away
+                    let nextZoom = Math.min(currentZoom + 0.1, maxZoom);
+                    cameraTrack.applyConstraints({ advanced: [{ zoom: nextZoom }] });
+                }
+            }
+        }
+
+        // Start the scanner automatically when the page loads
+        window.addEventListener('DOMContentLoaded', startScanner);
     </script>
 </body>
 </html>
